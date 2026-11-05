@@ -1,0 +1,388 @@
+import 'package:flutter/material.dart';
+
+import '../models/task.dart';
+import '../services/api_service.dart';
+import '../widgets/task_badges.dart';
+
+// Ana ekran: tüm görevleri listeler, filtreler, yeniler ve kaydırarak siler
+class TaskListScreen extends StatefulWidget {
+  const TaskListScreen({super.key});
+
+  @override
+  State<TaskListScreen> createState() => _TaskListScreenState();
+}
+
+class _TaskListScreenState extends State<TaskListScreen> {
+  final ApiService _api = ApiService();
+
+  List<Task> _tasks = [];
+  bool _loading = true; // ilk açılışta yükleniyor göstergesi çıksın
+  ApiException? _error; // son yüklemede hata olduysa burada tutulur
+  String? _statusFilter; // null = Tümü, aksi halde seçili durum
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTasks(initial: true);
+  }
+
+  // Görevleri backend'den çeker. initial = true ise setState çağırmadan başlar
+  // (initState içinde setState çağrılmamalı).
+  Future<void> _loadTasks({bool initial = false}) async {
+    if (!initial) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+
+    try {
+      final tasks = await _api.getTasks();
+      tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt)); // en yeni en üstte
+      if (!mounted) return;
+      setState(() {
+        _tasks = tasks;
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      _handleLoadError(e);
+    } catch (e) {
+      // Beklenmeyen her türlü hata da kullanıcıya gösterilsin, ekran boş kalmasın
+      _handleLoadError(ApiException('Beklenmeyen bir hata oluştu.', [e.toString()]));
+    }
+  }
+
+  void _handleLoadError(ApiException e) {
+    if (!mounted) return;
+    setState(() {
+      _error = e;
+      _loading = false;
+    });
+    // Ekranda zaten görevler varsa onları silme, sadece altta hata mesajı göster
+    if (_tasks.isNotEmpty) {
+      _showMessage(e.fullMessage, isError: true);
+    }
+  }
+
+  // Ekranın altında kısa bilgi/hata mesajı gösterir
+  void _showMessage(String text, {bool isError = false}) {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(text),
+        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
+      ),
+    );
+  }
+
+  // Silmeden önce onay ister, sonra backend'den siler.
+  // true dönerse kart listeden kaldırılır, false dönerse yerine geri gelir.
+  Future<bool> _confirmAndDelete(Task task) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Görevi sil'),
+        content: Text('"${task.title}" silinsin mi? Bu işlem geri alınamaz.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Sil'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return false;
+
+    try {
+      await _api.deleteTask(task.id);
+      if (!mounted) return false;
+      _showMessage('"${task.title}" silindi');
+      return true;
+    } on ApiException catch (e) {
+      if (mounted) _showMessage(e.fullMessage, isError: true);
+      return false;
+    }
+  }
+
+  // GEÇİCİ: 4. adımda görev detay ekranına yönlendirecek
+  void _openDetail(Task task) {
+    _showMessage('Görev detay ekranı 4. adımda eklenecek');
+  }
+
+  // GEÇİCİ: 5. adımda görev ekleme formuna yönlendirecek
+  void _openCreate() {
+    _showMessage('Görev ekleme formu 5. adımda eklenecek');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('TaskFlow'),
+        actions: [
+          IconButton(
+            tooltip: 'Yenile',
+            icon: const Icon(Icons.refresh),
+            onPressed: _loading ? null : () => _loadTasks(),
+          ),
+        ],
+      ),
+      body: _buildBody(),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openCreate,
+        icon: const Icon(Icons.add),
+        label: const Text('Yeni görev'),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    // 1) İlk yükleme sürüyor
+    if (_loading && _tasks.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    // 2) Hata var ve gösterilecek görev yok → hata ekranı + Tekrar dene
+    if (_error != null && _tasks.isEmpty) {
+      return _MessageView(
+        icon: Icons.cloud_off,
+        title: _error!.message,
+        details: _error!.details,
+        buttonText: 'Tekrar dene',
+        onPressed: () => _loadTasks(),
+      );
+    }
+
+    // 3) Hiç görev yok → boş durum mesajı (aşağı çekip yenilenebilir)
+    if (_tasks.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: () => _loadTasks(),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            SizedBox(height: 120),
+            _MessageView(
+              icon: Icons.inbox_outlined,
+              title: 'Henüz görev yok',
+              details: ['Sağ alttaki "Yeni görev" butonuyla ilk görevini ekle.'],
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 4) Görevler var → filtre çubuğu + liste
+    final visibleTasks = _statusFilter == null
+        ? _tasks
+        : _tasks.where((t) => t.status == _statusFilter).toList();
+
+    return Column(
+      children: [
+        _buildFilterBar(),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () => _loadTasks(),
+            child: visibleTasks.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      const SizedBox(height: 80),
+                      _MessageView(
+                        icon: Icons.filter_alt_off_outlined,
+                        title: '"${TaskStatus.label(_statusFilter!)}" durumunda görev yok',
+                        details: const ['Başka bir filtre seç ya da "Tümü"ne dön.'],
+                      ),
+                    ],
+                  )
+                : ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    // alttaki boşluk: son kart "Yeni görev" butonunun altında kalmasın
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 88),
+                    itemCount: visibleTasks.length,
+                    itemBuilder: (context, index) => _buildTaskCard(visibleTasks[index]),
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Üstteki durum filtreleri: Tümü / Bekliyor / Devam ediyor / Tamamlandı (sayılarıyla)
+  Widget _buildFilterBar() {
+    Widget chip(String label, String? value) {
+      final count = value == null
+          ? _tasks.length
+          : _tasks.where((t) => t.status == value).length;
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: ChoiceChip(
+          label: Text('$label ($count)'),
+          selected: _statusFilter == value,
+          onSelected: (_) => setState(() => _statusFilter = value),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Row(
+        children: [
+          chip('Tümü', null),
+          for (final status in TaskStatus.values) chip(TaskStatus.label(status), status),
+        ],
+      ),
+    );
+  }
+
+  // Tek bir görev kartı. Sola kaydırınca silme onayı çıkar.
+  Widget _buildTaskCard(Task task) {
+    final theme = Theme.of(context);
+
+    return Dismissible(
+      key: ValueKey(task.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.error,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(Icons.delete, color: theme.colorScheme.onError),
+      ),
+      confirmDismiss: (_) => _confirmAndDelete(task),
+      onDismissed: (_) => setState(() => _tasks.removeWhere((t) => t.id == task.id)),
+      child: Card(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _openDetail(task),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  task.isDone ? Icons.check_circle : Icons.radio_button_unchecked,
+                  color: statusColor(task.status),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        task.title,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          decoration: task.isDone ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                      if (task.description.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          task.description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          StatusChip(status: task.status),
+                          PriorityChip(priority: task.priority),
+                          if (task.assignee.isNotEmpty)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.person_outline,
+                                  size: 16,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(task.assignee, style: theme.textTheme.bodySmall),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, color: theme.colorScheme.outline),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Ortalanmış ikon + başlık + açıklama (+ isteğe bağlı buton).
+// Yükleme hatası, boş liste ve boş filtre durumlarında kullanılır.
+class _MessageView extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final List<String> details;
+  final String? buttonText;
+  final VoidCallback? onPressed;
+
+  const _MessageView({
+    required this.icon,
+    required this.title,
+    this.details = const [],
+    this.buttonText,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 64, color: theme.colorScheme.outline),
+            const SizedBox(height: 16),
+            Text(title, textAlign: TextAlign.center, style: theme.textTheme.titleMedium),
+            for (final line in details) ...[
+              const SizedBox(height: 6),
+              Text(
+                line,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+            if (buttonText != null && onPressed != null) ...[
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.refresh),
+                label: Text(buttonText!),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
