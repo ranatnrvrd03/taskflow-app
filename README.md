@@ -16,7 +16,7 @@ Node.js/Express ile yazılmış bir REST API ve bu API'yi kullanan, Android ve i
 - [Kurulum ve Çalıştırma](#kurulum-ve-çalıştırma)
 - [Telefonu Backend'e Bağlama](#telefonu-backende-bağlama)
 - [API Dokümantasyonu](#api-dokümantasyonu)
-- [Backend'de Yapılan Geliştirmeler](#backendde-yapılan-geliştirmeler)
+- [Backend Tasarım Kararları](#backend-tasarım-kararları)
 - [Hata Yönetimi](#hata-yönetimi)
 - [Test](#test)
 - [Platform Desteği](#platform-desteği)
@@ -326,20 +326,20 @@ Tüm hatalar JSON döner; doğrulama hatalarında `errors` listesi neyin yanlı�
 
 ---
 
-## Backend'de Yapılan Geliştirmeler
+## Backend Tasarım Kararları
 
-Backend, `taskflow-api` projesinden bu repoya taşınırken mobil uygulamanın güvenle kullanabilmesi için şu geliştirmeler yapıldı:
+Backend, mobil uygulamanın güvenle kullanabilmesi için şu kurallara göre tasarlandı:
 
-| Konu | Önceki davranış | Yeni davranış |
-|---|---|---|
-| Başlıksız görev | Boş başlıklı görev oluşuyordu | `400` + hata mesajı |
-| Durum / öncelik değerleri | Her değer kabul ediliyordu | Yalnızca tanımlı değerler; aksi halde `400` |
-| Görev listesi | Yalnızca dizi (`[]`) | `count` ve `tasks` alanlarıyla nesne |
-| Görev silme | `204`, boş gövde | `200` + silinen görev |
-| PATCH ile alanı boşaltma | `\|\|` kullanıldığı için boş değer gönderilince eski değer geri geliyordu | Gönderilen değer kaydediliyor |
-| Tanımsız adres, bozuk JSON, sunucu hatası | Express'in HTML hata sayfası | Her durumda JSON yanıt (`errorHandler` middleware'i) |
-| Dosya okuma/yazma hatası | Sessizce boş liste dönülüyordu | `500` dönülüyor; bozuk dosyanın üzerine yazılması engelleniyor |
-| Ağ erişimi | Yalnızca `localhost` | `0.0.0.0` üzerinde dinliyor; açılışta yerel IP adreslerini yazdırıyor |
+| Konu | Davranış |
+|---|---|
+| Başlık kontrolü | Başlıksız veya boş başlıklı görev oluşturulamaz; `400` ve hata mesajı döner |
+| Durum ve öncelik değerleri | Yalnızca tanımlı değerler kabul edilir; aksi halde `400` döner |
+| Görev listesi | `count` ve `tasks` alanlarıyla döner, liste boş olsa bile |
+| Görev silme | `200` ile silinen görevin bilgisi döner, yanıt gövdesi boş kalmaz |
+| Kısmi güncelleme (PATCH) | Yalnızca gönderilen alanlar değişir; bir alan boş metinle gönderilirse boş olarak kaydedilir (`??` operatörü) |
+| Tanımsız adres, bozuk JSON, sunucu hatası | Her durumda JSON yanıt döner (`errorHandler` middleware'i) |
+| Dosya okuma/yazma hatası | `500` döner; bozuk veri dosyasının üzerine yazılması engellenir |
+| Ağ erişimi | Sunucu `0.0.0.0` üzerinde dinler, böylece aynı ağdaki telefon da bağlanabilir; açılışta bilgisayarın yerel IP adreslerini yazdırır |
 
 ---
 

@@ -88,9 +88,9 @@ flutter:
   #         weight: 700
   #
   # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-packageflutter_launcher_icons:
+  # see https://flutter.dev/to/font-from-package
 flutter_launcher_icons:
-   android: true
-   ios: true
-   image_path: "assets/icon/app_icon.png"
-   remove_alpha_ios: true
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  remove_alpha_ios: true
