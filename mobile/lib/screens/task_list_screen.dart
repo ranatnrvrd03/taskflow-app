@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import '../main.dart';
 import '../models/task.dart';
 import '../services/api_service.dart';
 import '../widgets/task_badges.dart';
@@ -123,12 +123,55 @@ class _TaskListScreenState extends State<TaskListScreen> {
     _loadTasks();
   }
 
+  IconData _themeIcon(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return Icons.light_mode;
+      case ThemeMode.dark:
+        return Icons.dark_mode;
+      case ThemeMode.system:
+        return Icons.brightness_auto;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('TaskFlow'),
         actions: [
+                    ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeModeNotifier,
+            builder: (context, mode, _) => PopupMenuButton<ThemeMode>(
+              tooltip: 'Tema',
+              icon: Icon(_themeIcon(mode)),
+              initialValue: mode,
+              onSelected: (selected) => themeModeNotifier.value = selected,
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: ThemeMode.system,
+                  child: ListTile(
+                    leading: Icon(Icons.brightness_auto),
+                    title: Text('Sistem'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: ThemeMode.light,
+                  child: ListTile(
+                    leading: Icon(Icons.light_mode),
+                    title: Text('Açık'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: ThemeMode.dark,
+                  child: ListTile(
+                    leading: Icon(Icons.dark_mode),
+                    title: Text('Koyu'),
+                  ),
+                ),
+              ],
+            ),
+          ),
           IconButton(
             tooltip: 'Yenile',
             icon: const Icon(Icons.refresh),
