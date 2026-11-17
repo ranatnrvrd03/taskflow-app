@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import '../models/task.dart';
 import '../services/api_service.dart';
 import '../widgets/task_badges.dart';
+import 'task_detail_screen.dart';
+import 'task_form_screen.dart';
 
-// Ana ekran: tüm görevleri listeler, filtreler, yeniler ve kaydırarak siler
 class TaskListScreen extends StatefulWidget {
   const TaskListScreen({super.key});
 
@@ -16,9 +17,9 @@ class _TaskListScreenState extends State<TaskListScreen> {
   final ApiService _api = ApiService();
 
   List<Task> _tasks = [];
-  bool _loading = true; // ilk açılışta yükleniyor göstergesi çıksın
-  ApiException? _error; // son yüklemede hata olduysa burada tutulur
-  String? _statusFilter; // null = Tümü, aksi halde seçili durum
+  bool _loading = true;
+  ApiException? _error;
+  String? _statusFilter;
 
   @override
   void initState() {
@@ -26,8 +27,6 @@ class _TaskListScreenState extends State<TaskListScreen> {
     _loadTasks(initial: true);
   }
 
-  // Görevleri backend'den çeker. initial = true ise setState çağırmadan başlar
-  // (initState içinde setState çağrılmamalı).
   Future<void> _loadTasks({bool initial = false}) async {
     if (!initial) {
       setState(() {
@@ -38,7 +37,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
     try {
       final tasks = await _api.getTasks();
-      tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt)); // en yeni en üstte
+      tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       if (!mounted) return;
       setState(() {
         _tasks = tasks;
@@ -47,7 +46,6 @@ class _TaskListScreenState extends State<TaskListScreen> {
     } on ApiException catch (e) {
       _handleLoadError(e);
     } catch (e) {
-      // Beklenmeyen her türlü hata da kullanıcıya gösterilsin, ekran boş kalmasın
       _handleLoadError(ApiException('Beklenmeyen bir hata oluştu.', [e.toString()]));
     }
   }
@@ -58,13 +56,11 @@ class _TaskListScreenState extends State<TaskListScreen> {
       _error = e;
       _loading = false;
     });
-    // Ekranda zaten görevler varsa onları silme, sadece altta hata mesajı göster
     if (_tasks.isNotEmpty) {
       _showMessage(e.fullMessage, isError: true);
     }
   }
 
-  // Ekranın altında kısa bilgi/hata mesajı gösterir
   void _showMessage(String text, {bool isError = false}) {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
@@ -76,8 +72,6 @@ class _TaskListScreenState extends State<TaskListScreen> {
     );
   }
 
-  // Silmeden önce onay ister, sonra backend'den siler.
-  // true dönerse kart listeden kaldırılır, false dönerse yerine geri gelir.
   Future<bool> _confirmAndDelete(Task task) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -110,14 +104,23 @@ class _TaskListScreenState extends State<TaskListScreen> {
     }
   }
 
-  // GEÇİCİ: 4. adımda görev detay ekranına yönlendirecek
-  void _openDetail(Task task) {
-    _showMessage('Görev detay ekranı 4. adımda eklenecek');
+  Future<void> _openDetail(Task task) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => TaskDetailScreen(task: task)),
+    );
+    if (!mounted) return;
+    _loadTasks();
   }
 
-  // GEÇİCİ: 5. adımda görev ekleme formuna yönlendirecek
-  void _openCreate() {
-    _showMessage('Görev ekleme formu 5. adımda eklenecek');
+    Future<void> _openCreate() async {
+    final created = await Navigator.push<Task>(
+      context,
+      MaterialPageRoute(builder: (_) => const TaskFormScreen()),
+    );
+    if (!mounted || created == null) return;
+    setState(() => _statusFilter = null);
+    _loadTasks();
   }
 
   @override
@@ -143,12 +146,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
   }
 
   Widget _buildBody() {
-    // 1) İlk yükleme sürüyor
     if (_loading && _tasks.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // 2) Hata var ve gösterilecek görev yok → hata ekranı + Tekrar dene
     if (_error != null && _tasks.isEmpty) {
       return _MessageView(
         icon: Icons.cloud_off,
@@ -159,7 +160,6 @@ class _TaskListScreenState extends State<TaskListScreen> {
       );
     }
 
-    // 3) Hiç görev yok → boş durum mesajı (aşağı çekip yenilenebilir)
     if (_tasks.isEmpty) {
       return RefreshIndicator(
         onRefresh: () => _loadTasks(),
@@ -177,7 +177,6 @@ class _TaskListScreenState extends State<TaskListScreen> {
       );
     }
 
-    // 4) Görevler var → filtre çubuğu + liste
     final visibleTasks = _statusFilter == null
         ? _tasks
         : _tasks.where((t) => t.status == _statusFilter).toList();
@@ -202,7 +201,6 @@ class _TaskListScreenState extends State<TaskListScreen> {
                   )
                 : ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    // alttaki boşluk: son kart "Yeni görev" butonunun altında kalmasın
                     padding: const EdgeInsets.fromLTRB(12, 4, 12, 88),
                     itemCount: visibleTasks.length,
                     itemBuilder: (context, index) => _buildTaskCard(visibleTasks[index]),
@@ -213,7 +211,6 @@ class _TaskListScreenState extends State<TaskListScreen> {
     );
   }
 
-  // Üstteki durum filtreleri: Tümü / Bekliyor / Devam ediyor / Tamamlandı (sayılarıyla)
   Widget _buildFilterBar() {
     Widget chip(String label, String? value) {
       final count = value == null
@@ -241,7 +238,6 @@ class _TaskListScreenState extends State<TaskListScreen> {
     );
   }
 
-  // Tek bir görev kartı. Sola kaydırınca silme onayı çıkar.
   Widget _buildTaskCard(Task task) {
     final theme = Theme.of(context);
 
@@ -332,8 +328,6 @@ class _TaskListScreenState extends State<TaskListScreen> {
   }
 }
 
-// Ortalanmış ikon + başlık + açıklama (+ isteğe bağlı buton).
-// Yükleme hatası, boş liste ve boş filtre durumlarında kullanılır.
 class _MessageView extends StatelessWidget {
   final IconData icon;
   final String title;
