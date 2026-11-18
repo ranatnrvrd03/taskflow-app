@@ -2,6 +2,10 @@
 
 Node.js/Express ile yazılmış bir REST API ve bu API'yi kullanan, Android ve iOS uyumlu bir Flutter mobil uygulamasından oluşan görev yönetim sistemi.
 
+Backend, [Render](https://render.com) üzerinde kalıcı diskli bir sunucuda **canlı** olarak çalışır; mobil uygulama internete bağlı her yerden, kablosuz olarak kullanılabilir.
+
+**Canlı API:** [https://taskflow-app-dg2g.onrender.com/tasks](https://taskflow-app-dg2g.onrender.com/tasks)
+
 **Geliştiren:** Rana Tanrıverdi
 
 ---
@@ -13,6 +17,7 @@ Node.js/Express ile yazılmış bir REST API ve bu API'yi kullanan, Android ve i
 - [Kullanılan Teknolojiler](#kullanılan-teknolojiler)
 - [Mimari](#mimari)
 - [Proje Yapısı](#proje-yapısı)
+- [Canlı Sunucu ve Maliyet](#canlı-sunucu-ve-maliyet)
 - [Kurulum ve Çalıştırma](#kurulum-ve-çalıştırma)
 - [Telefonu Backend'e Bağlama](#telefonu-backende-bağlama)
 - [API Dokümantasyonu](#api-dokümantasyonu)
@@ -73,6 +78,7 @@ Node.js/Express ile yazılmış bir REST API ve bu API'yi kullanan, Android ve i
 - Tüm yanıtlar, hatalar dahil, anlamlı bir JSON gövdesi döndürür.
 - Her isteği tarih, metot ve adresle kaydeden logger middleware'i.
 - Merkezi hata yönetimi (tanımsız adres, bozuk JSON, sunucu hatası).
+- Render üzerinde canlı yayında; veriler kalıcı diskte saklanır, sunucu yeniden başlasa da kaybolmaz.
 
 ---
 
@@ -82,7 +88,8 @@ Node.js/Express ile yazılmış bir REST API ve bu API'yi kullanan, Android ve i
 |---|---|
 | Mobil | Flutter, Dart, Material 3, `http` paketi |
 | Backend | Node.js, Express 5, `ulid` (benzersiz ID üretimi) |
-| Veri saklama | JSON dosyası (`backend/data/tasks.json`) |
+| Veri saklama | JSON dosyası; canlıda Render kalıcı diskinde (`/var/data/tasks.json`) |
+| Sunucu | Render Web Service (Starter, Frankfurt), 1 GB kalıcı disk, HTTPS |
 | Araçlar | VS Code, Git/GitHub, Postman, Android Debug Bridge (`adb`), `flutter_launcher_icons` |
 
 ---
@@ -90,11 +97,13 @@ Node.js/Express ile yazılmış bir REST API ve bu API'yi kullanan, Android ve i
 ## Mimari
 
 ```
-┌──────────────────────┐      HTTP / JSON       ┌──────────────────────┐   okur / yazar   ┌──────────────┐
-│  Flutter uygulaması  │  ───────────────────▶  │  Node.js + Express   │  ─────────────▶  │  tasks.json  │
-│  (Android / iOS)     │  ◀───────────────────  │  REST API · :7777    │  ◀─────────────  │              │
-└──────────────────────┘                        └──────────────────────┘                  └──────────────┘
+┌──────────────────────┐   HTTPS / JSON   ┌────────────────── Render · Frankfurt ───────────────────┐
+│  Flutter uygulaması  │ ───────────────▶ │  Node.js + Express REST API  ──▶  kalıcı disk           │
+│  (Android / iOS)     │ ◀─────────────── │                                   /var/data/tasks.json  │
+└──────────────────────┘                  └─────────────────────────────────────────────────────────┘
 ```
+
+Geliştirme sırasında aynı backend bilgisayarda da (`npm start`, port 7777) çalıştırılabilir; uygulamanın hangi sunucuya bağlanacağı `config.dart`'taki tek satırla belirlenir.
 
 **Mobil uygulamanın katmanları:**
 
@@ -114,8 +123,8 @@ taskflow-app/
 │   ├── controllers/
 │   │   └── tasksController.js     # İş mantığı ve doğrulama
 │   ├── data/
-│   │   ├── taskStore.js           # tasks.json okuma / yazma
-│   │   └── tasks.json             # Veriler
+│   │   ├── taskStore.js           # Veri dosyası okuma / yazma
+│   │   └── tasks.json             # Örnek görevler (canlı sunucunun ilk verisi)
 │   ├── middleware/
 │   │   ├── logger.js              # İstek kaydı
 │   │   └── errorHandler.js        # 404 ve genel hata yakalayıcı
@@ -144,22 +153,76 @@ taskflow-app/
 
 ---
 
+## Canlı Sunucu ve Maliyet
+
+Backend, Render'ın ücretli planında yayınlandı. Ücretsiz planda sunucu 15 dakika kullanılmayınca uyuyor ve diske yazılan veriler siliniyordu; görevlerin kalıcı olması için ücretli plan ve kalıcı disk tercih edildi.
+
+**Adres:** `https://taskflow-app-dg2g.onrender.com`
+
+### Sunucu ayarları
+
+| Ayar | Değer |
+|---|---|
+| Servis türü | Web Service (Node) |
+| Bölge | Frankfurt (EU Central), Türkiye'ye en yakın bölge |
+| Kök klasör | `backend` |
+| Build / Start komutu | `npm install` / `npm start` |
+| Instance | Starter: 0.5 CPU, 512 MB RAM |
+| Kalıcı disk | 1 GB, `/var/data` klasörüne bağlı |
+| Ortam değişkeni | `DATA_FILE=/var/data/tasks.json` |
+| Sağlık kontrolü | `/` |
+| Otomatik deploy | `main` dalına her push'ta |
+
+### Maliyet
+
+| Kalem | Plan | Aylık ücret |
+|---|---|---|
+| Çalışma alanı | Hobby | $0 |
+| Web servisi | Starter (0.5 CPU, 512 MB RAM) | $7,00 |
+| Kalıcı disk | 1 GB × $0,25 | $0,25 |
+| Veri trafiği | Aylık 5 GB dahil | $0 |
+| **Toplam** | | **$7,25 / ay** (+ varsa vergi) |
+
+Ücret saniye bazında hesaplanır; ilk ay yalnızca servisin açık olduğu günler kadar ödenir. Servis silindiğinde ücretlendirme durur. *(Fiyatlar Kasım 2026'da Render'ın fiyat sayfasından alınmıştır.)*
+
+### Verilerin kalıcılığı nasıl sağlanıyor?
+
+1. `DATA_FILE` ortam değişkeni, backend'e verilerin kalıcı diskteki `/var/data/tasks.json` dosyasında tutulacağını söyler.
+2. Sunucu ilk açıldığında bu dosya yoksa, repodaki `backend/data/tasks.json` içindeki örnek görevler kalıcı diske kopyalanır.
+3. Sonraki tüm ekleme, güncelleme ve silme işlemleri kalıcı diske yazılır. Sunucu yeniden başlatıldığında veya yeni kod yüklendiğinde veriler korunur (yeniden başlatma testiyle doğrulandı).
+4. Bilgisayarda çalışırken `DATA_FILE` tanımlı olmadığı için backend doğrudan `backend/data/tasks.json` dosyasını kullanır.
+
+---
+
 ## Kurulum ve Çalıştırma
 
-### Gereksinimler
+### Uygulamayı hemen denemek
+
+Uygulama varsayılan olarak canlı sunucuya bağlıdır. Bir Android telefona yüklemek için:
+
+```bash
+cd mobile
+flutter build apk --release
+```
+
+Oluşan `mobile/build/app/outputs/flutter-apk/app-release.apk` dosyası telefona aktarılıp açılarak kurulur. Backend'i bilgisayarda çalıştırmak gerekmez.
+
+### Geliştirme ortamı
+
+#### Gereksinimler
 
 - [Node.js](https://nodejs.org/) (npm ile birlikte gelir)
 - [Flutter SDK](https://docs.flutter.dev/get-started/install) ve Android SDK
 - USB hata ayıklaması açık bir Android telefon (veya emülatör)
 
-### 1. Repoyu indirin
+#### 1. Repoyu indirin
 
 ```bash
 git clone https://github.com/ranatnrvrd03/taskflow-app.git
 cd taskflow-app
 ```
 
-### 2. Backend'i çalıştırın
+#### 2. Backend'i bilgisayarda çalıştırın
 
 ```bash
 cd backend
@@ -171,13 +234,14 @@ Terminalde şuna benzer bir çıktı görülür:
 
 ```
 Server is running on http://localhost:7777
+Veri dosyası: ...\backend\data\tasks.json
 Telefondan bağlanmak için aşağıdaki adreslerden ağınıza ait olanı kullanın:
   Wi-Fi: http://192.168.x.x:7777
 ```
 
 Tarayıcıda `http://localhost:7777` açıldığında `{"message":"TaskFlow API çalışıyor"}` yanıtı görülür.
 
-### 3. Mobil uygulamayı çalıştırın
+#### 3. Mobil uygulamayı çalıştırın
 
 Backend açık kalırken **ikinci bir terminalde**:
 
@@ -187,15 +251,27 @@ flutter pub get
 flutter run
 ```
 
-Uygulama telefonda açılmadan önce telefonun backend'e nasıl bağlanacağını aşağıdaki bölümden ayarlayın.
+Uygulamanın canlı sunucu yerine bilgisayardaki backend'e bağlanması için aşağıdaki bölümdeki yöntemlerden biri kullanılır.
 
 ---
 
 ## Telefonu Backend'e Bağlama
 
-Telefonda `localhost`, telefonun kendisini gösterir; bilgisayardaki sunucuya ulaşmak için iki yol vardır. Kullanılacak adres `mobile/lib/config.dart` dosyasındaki `baseUrl` satırına yazılır.
+Uygulamanın bağlanacağı adres `mobile/lib/config.dart` dosyasındaki `baseUrl` satırına yazılır.
 
-### Yöntem 1 — USB kablosu ile (önerilen)
+### Canlı sunucu (varsayılan)
+
+```dart
+static const String baseUrl = 'https://taskflow-app-dg2g.onrender.com';
+```
+
+Kablo, ağ veya güvenlik duvarı ayarı gerekmez; telefonun internete bağlı olması yeterlidir.
+
+### Geliştirme için bilgisayardaki backend
+
+Telefonda `localhost`, telefonun kendisini gösterir; bilgisayardaki sunucuya ulaşmak için iki yol vardır.
+
+#### Yöntem 1 — USB kablosu ile
 
 Ağdan bağımsızdır; Wi-Fi, modem veya güvenlik duvarı ayarı gerektirmez. Telefon USB ile bağlıyken:
 
@@ -212,7 +288,7 @@ static const String baseUrl = 'http://127.0.0.1:7777';
 >
 > Kablo çıkarılıp takıldığında veya telefon yeniden başlatıldığında komut tekrar çalıştırılmalıdır.
 
-### Yöntem 2 — Aynı Wi-Fi ağı / telefon hotspot'u ile
+#### Yöntem 2 — Aynı Wi-Fi ağı / telefon hotspot'u ile
 
 Telefon ve bilgisayar aynı ağdayken `npm start` çıktısındaki **Wi-Fi** adresi kullanılır:
 
@@ -339,7 +415,10 @@ Backend, mobil uygulamanın güvenle kullanabilmesi için şu kurallara göre ta
 | Kısmi güncelleme (PATCH) | Yalnızca gönderilen alanlar değişir; bir alan boş metinle gönderilirse boş olarak kaydedilir (`??` operatörü) |
 | Tanımsız adres, bozuk JSON, sunucu hatası | Her durumda JSON yanıt döner (`errorHandler` middleware'i) |
 | Dosya okuma/yazma hatası | `500` döner; bozuk veri dosyasının üzerine yazılması engellenir |
-| Ağ erişimi | Sunucu `0.0.0.0` üzerinde dinler, böylece aynı ağdaki telefon da bağlanabilir; açılışta bilgisayarın yerel IP adreslerini yazdırır |
+| Port | Render'ın verdiği `PORT` ortam değişkenini kullanır; tanımlı değilse 7777 |
+| Veri dosyasının yeri | `DATA_FILE` ortam değişkeniyle ayarlanır; canlıda kalıcı disk, bilgisayarda proje klasörü |
+| İlk veri | Kalıcı disk boşsa örnek görevlerle başlar |
+| Ağ erişimi | Sunucu `0.0.0.0` üzerinde dinler; bilgisayarda çalışırken açılışta yerel IP adreslerini yazdırır |
 
 ---
 
@@ -352,7 +431,8 @@ Projenin temel kuralı: **hiçbir istek boş yanıt dönmez, hiçbir ekran boş 
 | Veriler yükleniyor | Yükleniyor göstergesi |
 | Hiç görev yok | "Henüz görev yok" mesajı ve yönlendirme |
 | Seçili filtrede görev yok | "… durumunda görev yok" mesajı |
-| Sunucu kapalı / farklı ağ / zaman aşımı | Açıklamalı hata ekranı ve "Tekrar dene" butonu |
+| Sunucu kapalı / internet yok / zaman aşımı | Açıklamalı hata ekranı ve "Tekrar dene" butonu |
+| Sunucu yeniden başlatılıyor (`502`) | Hata mesajı; sunucu açılınca "Tekrar dene" ile devam |
 | Doğrulama hatası (ör. boş başlık) | Form alanının altında uyarı; istek gönderilmez |
 | Sunucunun döndürdüğü hata | Sunucu mesajı kırmızı bildirimle gösterilir, form kapanmaz ve girilen bilgiler kaybolmaz |
 | Görev başka yerden silinmiş | Detay ekranında "Bu görev artık mevcut değil" ve listeye dönüş butonu |
@@ -370,7 +450,11 @@ flutter analyze   # Statik analiz — sorun bulunmadı
 flutter test      # Görev modeli birim testleri — 3/3 başarılı
 ```
 
-**Backend:** Tüm endpoint'ler ve hata senaryoları (başlıksız görev, geçersiz durum/öncelik, olmayan ID, boş PATCH, tanımsız adres, bozuk JSON, boş liste) test edildi. Ayrıca uygulama gerçek bir Android telefonda uçtan uca denendi; her istek backend terminalinde logger tarafından kaydedilir:
+**Backend:** Tüm endpoint'ler ve hata senaryoları (başlıksız görev, geçersiz durum/öncelik, olmayan ID, boş PATCH, tanımsız adres, bozuk JSON, boş liste) test edildi.
+
+**Canlı sunucu:** Uygulama gerçek bir Android telefonda, kablosuz olarak canlı sunucu üzerinden uçtan uca denendi. Kalıcılık testi: uygulamadan görev eklendi, sunucu Render panelinden yeniden başlatıldı ve görevin silinmediği doğrulandı.
+
+Her istek, bilgisayarda terminale, canlıda Render'ın **Logs** ekranına logger tarafından kaydedilir:
 
 ```
 2026-11-17T20:30:00.000Z - GET /tasks
@@ -384,14 +468,14 @@ flutter test      # Görev modeli birim testleri — 3/3 başarılı
 
 | Platform | Durum |
 |---|---|
-| **Android** | Gerçek cihazda test edildi. İnternet izni ve HTTP bağlantı ayarı `AndroidManifest.xml`'de tanımlı. |
-| **iOS** | Kod tabanı iOS uyumludur. HTTP ve yerel ağ erişimi için gerekli ayarlar (`NSAppTransportSecurity`, `NSLocalNetworkUsageDescription`) `Info.plist`'te tanımlıdır ve uygulama simgesi iOS için de üretilmiştir. iOS derlemesi için macOS ve Xcode gerektiğinden iOS cihazda test edilmedi. |
+| **Android** | Gerçek cihazda, canlı sunucu ve yerel backend ile test edildi. İnternet izni `AndroidManifest.xml`'de tanımlı. |
+| **iOS** | Kod tabanı iOS uyumludur. Canlı sunucu HTTPS kullandığı için ek ayar gerektirmez; geliştirmede yerel HTTP backend'e erişim için gerekli ayarlar (`NSAppTransportSecurity`, `NSLocalNetworkUsageDescription`) `Info.plist`'te tanımlıdır ve uygulama simgesi iOS için de üretilmiştir. iOS derlemesi için macOS ve Xcode gerektiğinden iOS cihazda test edilmedi. |
 
 ---
 
 ## Bilinen Sınırlamalar
 
-- Veriler bir JSON dosyasında saklanır; aynı anda çok sayıda yazma işlemi için bir veritabanı (ör. MongoDB, PostgreSQL) daha uygun olacaktır.
+- Veriler kalıcı diskteki bir JSON dosyasında saklanır; aynı anda çok sayıda yazma işlemi için bir veritabanı (ör. PostgreSQL, MongoDB) daha uygun olacaktır.
+- Kalıcı disk kullanan Render servisleri tek sunucu ile çalışır ve yeni kod yüklenirken birkaç saniyelik kesinti olur (bu sırada uygulama hata mesajı gösterir).
 - Kullanıcı girişi / kimlik doğrulama yoktur; tüm görevler herkese açıktır.
-- Backend yerel ağda HTTP ile çalışır. Uygulamanın internetten erişilebilmesi için backend'in bir sunucuya yüklenmesi ve HTTPS kullanılması gerekir; bu durumda uygulamada yalnızca `config.dart`'taki adres değişir.
 - Tema tercihi (Açık / Koyu) uygulama kapatılınca sıfırlanır ve telefonun temasına döner.
