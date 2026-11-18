@@ -1,22 +1,60 @@
 [
   {
-    "id": "01M7NM19D7Y2F32KWBP4MM53QE",
-    "title": "Readme File oluştur",
-    "description": "Taskflow app sunumu için Readme file oluşturulacak",
+    "id": "01M6NSVBE0NEDRCYP7R1CN4WMP",
+    "title": "Proje kurulumunu tamamla",
+    "description": "Backend ve Flutter projelerini taskflow-app reposunda oluştur",
+    "status": "done",
+    "priority": 2,
+    "assignee": "Rana Tanrıverdi",
+    "createdAt": "2026-11-05T12:10:00.000Z",
+    "updatedAt": "2026-11-05T15:40:00.000Z"
+  },
+  {
+    "id": "01M7NM19D8MRM4W1B0RAPR04A9",
+    "title": "README dosyasını hazırla",
+    "description": "Kurulum, API dokümantasyonu ve ekran görüntüleriyle proje sunum dosyası",
     "status": "done",
     "priority": 3,
     "assignee": "Rana Tanrıverdi",
     "createdAt": "2026-11-17T20:44:04.904Z",
-    "updatedAt": "2026-11-17T20:49:04.070Z"
+    "updatedAt": "2026-11-18T00:52:00.000Z"
   },
   {
-    "id": "01M7NM9175YR6VYJN9ZE7PV678",
-    "title": "TEST GÖREVİ",
-    "description": "test görevi 1",
+    "id": "01M7RES6A0KRRF81YQSHB7Y8Y3",
+    "title": "Backend'i Render'a yükle",
+    "description": "Kalıcı disk ile canlı sunucu kurulumu",
+    "status": "in_progress",
+    "priority": 3,
+    "assignee": "Rana Tanrıverdi",
+    "createdAt": "2026-11-18T23:10:00.000Z",
+    "updatedAt": "2026-11-19T00:40:00.000Z"
+  },
+  {
+    "id": "01M7RFBG801C45R6W52JC4KKW6",
+    "title": "Mobil uygulamayı test et",
+    "description": "Tüm ekranları gerçek cihazda kablosuz olarak dene",
     "status": "in_progress",
     "priority": 2,
     "assignee": "Rana Tanrıverdi",
-    "createdAt": "2026-11-17T20:48:18.662Z",
-    "updatedAt": "2026-11-17T20:48:52.981Z"
+    "createdAt": "2026-11-18T23:20:00.000Z",
+    "updatedAt": "2026-11-19T00:35:00.000Z"
+  },
+  {
+    "id": "01M7RKBNT0FRSC88C6RACB84SX",
+    "title": "Sunum provası yap",
+    "description": "Canlı demo ve sorular için hazırlık",
+    "status": "pending",
+    "priority": 3,
+    "assignee": "Rana Tanrıverdi",
+    "createdAt": "2026-11-19T00:30:00.000Z"
+  },
+  {
+    "id": "01M7RKFB00HPGBMZ7HNYKB9C0V",
+    "title": "Uygulama ikonunu gözden geçir",
+    "description": "Farklı telefon temalarında simgenin görünümünü kontrol et",
+    "status": "pending",
+    "priority": 1,
+    "assignee": "",
+    "createdAt": "2026-11-19T00:32:00.000Z"
   }
 ]
