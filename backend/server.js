@@ -4,7 +4,7 @@ const app = express();
 const tasksRouter = require('./routes/tasks');
 const logger = require('./middleware/logger');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
-const { dataFilePath } = require('./data/taskStore');
+const { dbFilePath } = require('./data/db');
 
 const port = process.env.PORT || 7777;
 
@@ -35,7 +35,7 @@ function getLocalIPs() {
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on http://localhost:${port}`);
-  console.log(`Veri dosyası: ${dataFilePath}`);
+    console.log(`Veritabanı: ${dbFilePath}`);
   console.log('Telefondan bağlanmak için aşağıdaki adreslerden ağınıza ait olanı kullanın:');
   for (const ip of getLocalIPs()) {
     console.log(`  ${ip.name}: http://${ip.address}:${port}`);
