@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/task.dart';
 import '../services/api_service.dart';
+import '../services/session.dart';
 import '../widgets/task_badges.dart';
 import 'task_form_screen.dart';
 
@@ -119,7 +120,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
-    Future<void> _openEdit() async {
+  Future<void> _openEdit() async {
     final updated = await Navigator.push<Task>(
       context,
       MaterialPageRoute(builder: (_) => TaskFormScreen(task: _task)),
@@ -127,23 +128,25 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     if (!mounted || updated == null) return;
     setState(() => _task = updated);
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Görev detayı'),
         actions: [
-          IconButton(
-            tooltip: 'Düzenle',
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: _saving || _error != null ? null : _openEdit,
-          ),
-          IconButton(
-            tooltip: 'Sil',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: _saving || _error != null ? null : _delete,
-          ),
+          if (Session.isCeo) ...[
+            IconButton(
+              tooltip: 'Düzenle',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: _saving || _error != null ? null : _openEdit,
+            ),
+            IconButton(
+              tooltip: 'Sil',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _saving || _error != null ? null : _delete,
+            ),
+          ],
         ],
       ),
       body: _buildBody(),
@@ -245,6 +248,12 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                 label: 'Sorumlu',
                 value: _task.assignee.isEmpty ? 'Atanmamış' : _task.assignee,
                 muted: _task.assignee.isEmpty,
+              ),
+              _InfoTile(
+                icon: Icons.event_available,
+                label: 'Son tarih',
+                value: _task.deadlineText,
+                muted: _task.deadline == null,
               ),
               _InfoTile(
                 icon: Icons.event_outlined,

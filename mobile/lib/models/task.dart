@@ -47,6 +47,8 @@ class Task {
   final String status;
   final int priority;
   final String assignee;
+  final String? assigneeId;
+  final DateTime? deadline;
   final DateTime createdAt;
   final DateTime? updatedAt;
 
@@ -57,6 +59,8 @@ class Task {
     required this.status,
     required this.priority,
     required this.assignee,
+    this.assigneeId,
+    this.deadline,
     required this.createdAt,
     this.updatedAt,
   });
@@ -69,6 +73,8 @@ class Task {
       status: (json['status'] as String?) ?? TaskStatus.pending,
       priority: (json['priority'] as num?)?.toInt() ?? TaskPriority.medium,
       assignee: (json['assignee'] as String?) ?? '',
+      assigneeId: json['assigneeId'] as String?,
+      deadline: DateTime.tryParse(json['deadline'] as String? ?? ''),
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
       updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? ''),
     );
@@ -77,4 +83,34 @@ class Task {
   String get statusLabel => TaskStatus.label(status);
   String get priorityLabel => TaskPriority.label(priority);
   bool get isDone => status == TaskStatus.done;
+
+  int? get daysLeft {
+    if (deadline == null) return null;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final due = DateTime(deadline!.year, deadline!.month, deadline!.day);
+    return due.difference(today).inDays;
+  }
+
+  bool get isOverdue => !isDone && (daysLeft ?? 0) < 0;
+
+  String get deadlineText {
+    if (deadline == null) return 'Belirlenmedi';
+    final date = formatDate(deadline!);
+    if (isDone) return date;
+    final days = daysLeft!;
+    if (days < 0) return '$date (${-days} gün gecikti)';
+    if (days == 0) return '$date (bugün son gün)';
+    return '$date ($days gün kaldı)';
+  }
+}
+
+String formatDate(DateTime value) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(value.day)}.${two(value.month)}.${value.year}';
+}
+
+String toApiDate(DateTime value) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${value.year}-${two(value.month)}-${two(value.day)}';
 }

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 import '../models/task.dart';
 import '../services/api_service.dart';
+import '../services/session.dart';
 import '../widgets/task_badges.dart';
+import 'admin_panel_screen.dart';
 import 'task_detail_screen.dart';
 import 'task_form_screen.dart';
 
@@ -113,7 +115,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
     _loadTasks();
   }
 
-    Future<void> _openCreate() async {
+  Future<void> _openCreate() async {
     final created = await Navigator.push<Task>(
       context,
       MaterialPageRoute(builder: (_) => const TaskFormScreen()),
@@ -121,6 +123,38 @@ class _TaskListScreenState extends State<TaskListScreen> {
     if (!mounted || created == null) return;
     setState(() => _statusFilter = null);
     _loadTasks();
+  }
+
+  Future<void> _openAdminPanel() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AdminPanelScreen()),
+    );
+    if (!mounted) return;
+    _loadTasks();
+  }
+
+  Future<void> _confirmLogout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Çıkış yap'),
+        content: const Text('Hesabından çıkış yapılsın mı?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Çıkış yap'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await Session.logout();
+    }
   }
 
   IconData _themeIcon(ThemeMode mode) {
@@ -138,9 +172,25 @@ class _TaskListScreenState extends State<TaskListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('TaskFlow'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('TaskFlow'),
+            if (Session.user != null)
+              Text(
+                '${Session.user!.name} · ${Session.user!.roleLabel}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+          ],
+        ),
         actions: [
-                    ValueListenableBuilder<ThemeMode>(
+          if (Session.isCeo)
+            IconButton(
+              tooltip: 'Ekip paneli',
+              icon: const Icon(Icons.groups_outlined),
+              onPressed: _openAdminPanel,
+            ),
+          ValueListenableBuilder<ThemeMode>(
             valueListenable: themeModeNotifier,
             builder: (context, mode, _) => PopupMenuButton<ThemeMode>(
               tooltip: 'Tema',
@@ -177,14 +227,21 @@ class _TaskListScreenState extends State<TaskListScreen> {
             icon: const Icon(Icons.refresh),
             onPressed: _loading ? null : () => _loadTasks(),
           ),
+          IconButton(
+            tooltip: 'Çıkış yap',
+            icon: const Icon(Icons.logout),
+            onPressed: _confirmLogout,
+          ),
         ],
       ),
       body: _buildBody(),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openCreate,
-        icon: const Icon(Icons.add),
-        label: const Text('Yeni görev'),
-      ),
+      floatingActionButton: Session.isCeo
+          ? FloatingActionButton.extended(
+              onPressed: _openCreate,
+              icon: const Icon(Icons.add),
+              label: const Text('Yeni görev'),
+            )
+          : null,
     );
   }
 
@@ -208,12 +265,16 @@ class _TaskListScreenState extends State<TaskListScreen> {
         onRefresh: () => _loadTasks(),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          children: const [
-            SizedBox(height: 120),
+          children: [
+            const SizedBox(height: 120),
             _MessageView(
               icon: Icons.inbox_outlined,
-              title: 'Henüz görev yok',
-              details: ['Sağ alttaki "Yeni görev" butonuyla ilk görevini ekle.'],
+              title: Session.isCeo ? 'Henüz görev yok' : 'Sana atanmış görev yok',
+              details: [
+                Session.isCeo
+                    ? 'Sağ alttaki "Yeni görev" butonuyla ilk görevi ekle.'
+                    : 'Yöneticin sana görev atadığında burada görünecek.',
+              ],
             ),
           ],
         ),
@@ -286,7 +347,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
 
     return Dismissible(
       key: ValueKey(task.id),
-      direction: DismissDirection.endToStart,
+      direction: Session.isCeo ? DismissDirection.endToStart : DismissDirection.none,
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -343,6 +404,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                         children: [
                           StatusChip(status: task.status),
                           PriorityChip(priority: task.priority),
+                          if (task.deadline != null) DeadlineChip(task: task),
                           if (task.assignee.isNotEmpty)
                             Row(
                               mainAxisSize: MainAxisSize.min,

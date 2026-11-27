@@ -90,3 +90,39 @@ class PriorityChip extends StatelessWidget {
     );
   }
 }
+
+class DeadlineChip extends StatelessWidget {
+  final Task task;
+
+  const DeadlineChip({super.key, required this.task});
+
+  @override
+  Widget build(BuildContext context) {
+    final deadline = task.deadline;
+    if (deadline == null) return const SizedBox.shrink();
+
+    final days = task.daysLeft!;
+    final date = formatDate(deadline);
+    String text;
+    Color color;
+
+    if (task.isDone) {
+      text = date;
+      color = Colors.grey;
+    } else if (days < 0) {
+      text = 'Gecikti · $date';
+      color = Colors.red;
+    } else if (days == 0) {
+      text = 'Bugün son gün';
+      color = Colors.deepOrange;
+    } else if (days == 1) {
+      text = 'Yarın son gün';
+      color = Colors.orange;
+    } else {
+      text = '$days gün kaldı · $date';
+      color = Colors.teal;
+    }
+
+    return LabelChip(text: text, color: color, icon: Icons.event);
+  }
+}

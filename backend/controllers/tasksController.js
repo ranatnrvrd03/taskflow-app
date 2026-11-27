@@ -1,9 +1,11 @@
 const tasks = require('../data/taskRepository');
+const users = require('../data/userRepository');
 const { ulid } = require('ulid');
 
 const STATUSES = ['pending', 'in_progress', 'done'];
 const PRIORITIES = [1, 2, 3];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const ALLOWED_FIELDS = ['title', 'description', 'status', 'priority', 'assigneeId', 'deadline'];
 
 function isValidDate(value) {
   if (typeof value !== 'string' || !DATE_PATTERN.test(value)) {
@@ -13,9 +15,17 @@ function isValidDate(value) {
   return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value);
 }
 
+function isCeo(req) {
+  return req.user.role === 'ceo';
+}
+
+function canSee(req, task) {
+  return isCeo(req) || task.assigneeId === req.user.id;
+}
+
 function validateTask(body, isUpdate) {
   const errors = [];
-  const { title, description, status, priority, assignee, deadline } = body;
+  const { title, description, status, priority, assigneeId, deadline } = body;
 
   if (!isUpdate || title !== undefined) {
     if (typeof title !== 'string' || title.trim() === '') {
@@ -25,9 +35,6 @@ function validateTask(body, isUpdate) {
 
   if (description !== undefined && typeof description !== 'string') {
     errors.push('Açıklama metin olmalıdır');
-  }
-  if (assignee !== undefined && typeof assignee !== 'string') {
-    errors.push('Sorumlu kişi metin olmalıdır');
   }
 
   if (status !== undefined && !STATUSES.includes(status)) {
@@ -42,6 +49,12 @@ function validateTask(body, isUpdate) {
     errors.push('Son tarih YYYY-AA-GG biçiminde geçerli bir tarih olmalıdır (ör. 2026-11-30)');
   }
 
+  if (assigneeId !== undefined && assigneeId !== null) {
+    if (typeof assigneeId !== 'string' || !users.findById(assigneeId)) {
+      errors.push('Atanan kişi bulunamadı');
+    }
+  }
+
   return errors;
 }
 
@@ -53,15 +66,16 @@ function createTask(req, res) {
     return res.status(400).json({ message: 'Geçersiz görev bilgisi', errors });
   }
 
-  const { title, description, priority, assignee, deadline } = body;
+  const { title, description, priority, assigneeId, deadline } = body;
   const task = tasks.insert({
     id: ulid(),
     title: title.trim(),
     description: (description ?? '').trim(),
     status: 'pending',
     priority: priority ?? 2,
-    assignee: (assignee ?? '').trim(),
+    assigneeId: assigneeId ?? null,
     deadline: deadline ?? null,
+    createdBy: req.user.id,
     createdAt: new Date().toISOString(),
   });
 
@@ -69,14 +83,14 @@ function createTask(req, res) {
 }
 
 function getAllTasks(req, res) {
-  const list = tasks.findAll();
+  const list = isCeo(req) ? tasks.findAll() : tasks.findAll(req.user.id);
   res.status(200).json({ count: list.length, tasks: list });
 }
 
 function getTaskById(req, res) {
   const task = tasks.findById(req.params.id);
 
-  if (!task) {
+  if (!task || !canSee(req, task)) {
     return res.status(404).json({ message: 'Görev bulunamadı' });
   }
 
@@ -85,14 +99,17 @@ function getTaskById(req, res) {
 
 function updateTask(req, res) {
   const body = req.body || {};
-  const allowedFields = ['title', 'description', 'status', 'priority', 'assignee', 'deadline'];
 
-  const hasField = allowedFields.some((field) => body[field] !== undefined);
-  if (!hasField) {
+  const sentFields = ALLOWED_FIELDS.filter((field) => body[field] !== undefined);
+  if (sentFields.length === 0) {
     return res.status(400).json({
       message: 'Güncellenecek alan gönderilmedi',
-      errors: [`Şu alanlardan en az biri gönderilmelidir: ${allowedFields.join(', ')}`],
+      errors: [`Şu alanlardan en az biri gönderilmelidir: ${ALLOWED_FIELDS.join(', ')}`],
     });
+  }
+
+  if (!isCeo(req) && sentFields.some((field) => field !== 'status')) {
+    return res.status(403).json({ message: 'Çalışanlar sadece görevin durumunu değiştirebilir' });
   }
 
   const errors = validateTask(body, true);
@@ -101,18 +118,18 @@ function updateTask(req, res) {
   }
 
   const current = tasks.findById(req.params.id);
-  if (!current) {
+  if (!current || !canSee(req, current)) {
     return res.status(404).json({ message: 'Görev bulunamadı' });
   }
 
-  const { title, status, description, priority, assignee, deadline } = body;
+  const { title, status, description, priority, assigneeId, deadline } = body;
 
   const task = tasks.update(current.id, {
     title: title !== undefined ? title.trim() : current.title,
     description: description !== undefined ? description.trim() : current.description,
     status: status ?? current.status,
     priority: priority ?? current.priority,
-    assignee: assignee !== undefined ? assignee.trim() : current.assignee,
+    assigneeId: assigneeId !== undefined ? assigneeId : current.assigneeId,
     deadline: deadline !== undefined ? deadline : current.deadline,
     updatedAt: new Date().toISOString(),
   });

@@ -2,6 +2,8 @@ const express = require('express');
 const os = require('os');
 const app = express();
 const tasksRouter = require('./routes/tasks');
+const authRouter = require('./routes/auth');
+const usersRouter = require('./routes/users');
 const logger = require('./middleware/logger');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const { dbFilePath } = require('./data/db');
@@ -14,7 +16,8 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.status(200).json({ message: 'TaskFlow API çalışıyor' });
 });
-
+app.use('/auth', authRouter);
+app.use('/users', usersRouter);
 app.use('/tasks', tasksRouter);
 
 app.use(notFound);

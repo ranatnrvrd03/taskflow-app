@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/task.dart';
+import '../models/user.dart';
 import '../services/api_service.dart';
 import '../widgets/task_badges.dart';
 
@@ -21,8 +22,12 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
 
   late final TextEditingController _titleController;
   late final TextEditingController _descriptionController;
-  late final TextEditingController _assigneeController;
   late int _priority;
+  DateTime? _deadline;
+  String? _assigneeId;
+  List<AppUser> _users = [];
+  bool _usersLoading = true;
+  String? _usersError;
   bool _saving = false;
 
   @override
@@ -31,15 +36,43 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     final task = widget.task;
     _titleController = TextEditingController(text: task?.title ?? '');
     _descriptionController = TextEditingController(text: task?.description ?? '');
-    _assigneeController = TextEditingController(text: task?.assignee ?? '');
     _priority = task?.priority ?? TaskPriority.medium;
+    _deadline = task?.deadline;
+    _assigneeId = task?.assigneeId;
+    _loadUsers(initial: true);
+  }
+
+  Future<void> _loadUsers({bool initial = false}) async {
+    if (!initial) {
+      setState(() {
+        _usersLoading = true;
+        _usersError = null;
+      });
+    }
+    try {
+      final members = await _api.getUsers();
+      if (!mounted) return;
+      final users = members.map((m) => m.user).toList();
+      setState(() {
+        _users = users;
+        _usersLoading = false;
+        if (_assigneeId != null && !users.any((u) => u.id == _assigneeId)) {
+          _assigneeId = null;
+        }
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _usersLoading = false;
+        _usersError = e.message;
+      });
+    }
   }
 
   @override
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
-    _assigneeController.dispose();
     super.dispose();
   }
 
@@ -58,12 +91,15 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
     final changes = <String, dynamic>{};
     final title = _titleController.text.trim();
     final description = _descriptionController.text.trim();
-    final assignee = _assigneeController.text.trim();
 
     if (title != task.title) changes['title'] = title;
     if (description != task.description) changes['description'] = description;
-    if (assignee != task.assignee) changes['assignee'] = assignee;
+    if (_assigneeId != task.assigneeId) changes['assigneeId'] = _assigneeId;
     if (_priority != task.priority) changes['priority'] = _priority;
+
+    final oldDeadline = task.deadline == null ? null : toApiDate(task.deadline!);
+    final newDeadline = _deadline == null ? null : toApiDate(_deadline!);
+    if (newDeadline != oldDeadline) changes['deadline'] = newDeadline;
 
     return changes;
   }
@@ -85,10 +121,28 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           title: _titleController.text.trim(),
           description: _descriptionController.text.trim(),
           priority: _priority,
-          assignee: _assigneeController.text.trim(),
+          assigneeId: _assigneeId,
+          deadline: _deadline == null ? null : toApiDate(_deadline!),
         ),
         'Görev oluşturuldu',
       );
+    }
+  }
+
+  Future<void> _pickDeadline() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final current = _deadline;
+    final firstDate = current != null && current.isBefore(today) ? current : today;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current ?? today.add(const Duration(days: 1)),
+      firstDate: firstDate,
+      lastDate: today.add(const Duration(days: 730)),
+      helpText: 'Son tarih seç',
+    );
+    if (picked != null) {
+      setState(() => _deadline = picked);
     }
   }
 
@@ -105,6 +159,43 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       setState(() => _saving = false);
       _showMessage(e.fullMessage, isError: true);
     }
+  }
+
+  Widget _buildAssigneeField() {
+    if (_usersLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: LinearProgressIndicator(),
+      );
+    }
+
+    if (_usersError != null) {
+      return ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.error_outline),
+        title: const Text('Kişi listesi yüklenemedi'),
+        subtitle: Text(_usersError!),
+        trailing: TextButton(onPressed: () => _loadUsers(), child: const Text('Tekrar dene')),
+      );
+    }
+
+    return DropdownButtonFormField<String?>(
+      initialValue: _assigneeId,
+      decoration: const InputDecoration(
+        labelText: 'Atanan kişi',
+        prefixIcon: Icon(Icons.person_outline),
+        border: OutlineInputBorder(),
+      ),
+      items: [
+        const DropdownMenuItem<String?>(value: null, child: Text('Atanmamış')),
+        for (final user in _users)
+          DropdownMenuItem<String?>(
+            value: user.id,
+            child: Text('${user.name} (${user.roleLabel})'),
+          ),
+      ],
+      onChanged: _saving ? null : (value) => setState(() => _assigneeId = value),
+    );
   }
 
   @override
@@ -154,18 +245,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            TextFormField(
-              controller: _assigneeController,
-              enabled: !_saving,
-              maxLength: 50,
-              textInputAction: TextInputAction.done,
-              decoration: const InputDecoration(
-                labelText: 'Sorumlu kişi',
-                hintText: 'Örn: rana (isteğe bağlı)',
-                prefixIcon: Icon(Icons.person_outline),
-                border: OutlineInputBorder(),
-              ),
-            ),
+            _buildAssigneeField(),
             const SizedBox(height: 16),
             Text('Öncelik', style: theme.textTheme.titleSmall),
             const SizedBox(height: 10),
@@ -186,6 +266,34 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                     ? null
                     : (set) => setState(() => _priority = set.first),
               ),
+            ),
+            const SizedBox(height: 20),
+            Text('Son tarih', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _saving ? null : _pickDeadline,
+                    icon: const Icon(Icons.event),
+                    label: Text(
+                      _deadline == null ? 'Tarih seç (isteğe bağlı)' : formatDate(_deadline!),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      alignment: Alignment.centerLeft,
+                    ),
+                  ),
+                ),
+                if (_deadline != null) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Son tarihi kaldır',
+                    onPressed: _saving ? null : () => setState(() => _deadline = null),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ],
             ),
             if (!widget.isEdit) ...[
               const SizedBox(height: 16),
